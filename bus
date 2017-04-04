@@ -1,0 +1,83 @@
+#!/usr/bin/python
+#
+# creates a "message hub" that nodes can use to communicate with each other
+# It creates 8 endpoints for nodes to connect to - e.g. node <i> makes
+# a SEQPACKET connection to the address '\0<name>.bus.<i>' where <name> is your 
+# username
+#
+# You can't run multiple copies of this program on the same machine under the same
+# user ID, or else they'll try to use the same addresses.
+#
+
+import sys
+import threading
+import socket
+import argparse
+import select
+import string
+import getpass
+
+parser = argparse.ArgumentParser(description='Bus - project 5 message bus')
+parser.add_argument('--verbose', action='store_true', help='print transmitted messages')
+args = parser.parse_args()
+
+sockets = [None] * 9
+
+# a single endpoint - accept connections on "bus.#", and forward packets between
+# connections. Runs as a separate thread.
+#
+def transfer(i):
+    global sockets
+    
+    ls = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    ls.bind('\0%s.bus.%d' % (getpass.getuser(), i))
+    ls.listen(2)
+    
+    while True:
+        s,addr = ls.accept()
+        print 'connection on %d from %s' % (i, addr)
+        sockets[i] = s
+        while True:
+            try:
+                dgram = s.recv(4096)
+            except:
+                break
+            if dgram.startswith('To: '):
+                j = int(dgram[4])
+                if j >= 0 and j < 9:
+                    if sockets[j]:
+                        sockets[j].send(dgram)
+                    if args.verbose:
+                        print dgram
+                    continue
+                    
+            if dgram:
+                print 'invalid message:\n%s' % dgram
+                s.close()
+            else:
+                print 'connection %d closed' % i
+            sockets[i] = None
+            break
+
+def run_bus():
+    # start the receivers
+    #
+    threads = [threading.Thread(target=transfer, args=[i]) for i in range(9)]
+    for t in threads:
+        t.daemon = True                   # so ^C works
+        t.start()
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    s.bind('\0%s.bus.ctl' % getpass.getuser())
+
+    # and handle fail/fix messages
+    #
+    while True:
+        dgram = s.recv(1024)
+        if not dgram:
+            break
+        if not args.quiet:
+            print dgram
+    
+
+if __name__ == '__main__':
+    run_bus()
