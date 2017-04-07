@@ -19,9 +19,15 @@ import getpass
 
 parser = argparse.ArgumentParser(description='Bus - project 5 message bus')
 parser.add_argument('--verbose', action='store_true', help='print transmitted messages')
+parser.add_argument('--quiet', action='store_true', help='don\'t print anything')
 args = parser.parse_args()
 
-sockets = [None] * 9
+sockets = [None] * 8
+socket_map = dict()
+
+def print_msg(f, t, msg):
+    for line in msg.split('\n'):
+        print f, '->', t, line
 
 # a single endpoint - accept connections on "bus.#", and forward packets between
 # connections. Runs as a separate thread.
@@ -35,49 +41,85 @@ def transfer(i):
     
     while True:
         s,addr = ls.accept()
-        print 'connection on %d from %s' % (i, addr)
+        print 'connection on %d' % i
         sockets[i] = s
         while True:
+            dgram = None
             try:
                 dgram = s.recv(4096)
             except:
-                break
-            if dgram.startswith('To: '):
-                j = int(dgram[4])
-                if j >= 0 and j < 9:
-                    if sockets[j]:
-                        sockets[j].send(dgram)
-                    if args.verbose:
-                        print dgram
-                    continue
-                    
-            if dgram:
-                print 'invalid message:\n%s' % dgram
-                s.close()
-            else:
-                print 'connection %d closed' % i
-            sockets[i] = None
-            break
+                pass
 
+            if not dgram or not dgram.startswith('To: '):
+                s.close()
+                sockets[i] = None
+                break
+            
+            d = dict([line.split(': ') for line in dgram.split('\n')])
+            t,id = int(d['To']),int(d['Id'])
+            if args.verbose:
+                print_msg(i, t, dgram)
+            if t < 8:
+                sockets[t].send(dgram)
+            elif id in socket_map:
+                    socket_map[id].send(dgram)
+                    socket_map[id].close()
+                    del socket_map[id]
+
+client_sockets = []
+
+def client_transfer():
+    global sockets
+    ls = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    my_sockets = []
+    ls.bind('\0%s.bus.%d' % (getpass.getuser(), 8))
+    ls.listen(2)
+
+    while True:
+        ready, ignore1, ignore2 = select.select(my_sockets + [socket_map[i] for i in socket_map] + [ls], (), ())
+        for r in ready:
+            if r == ls:
+                s2,addr = r.accept()
+                my_sockets.append(s2)
+                if not args.quiet:
+                    print 'connection from', addr
+            else:
+                try:
+                    dgram = r.recv(4096)
+                except:
+                    dgram = None
+                if not dgram or not dgram.startswith('To: '):
+                    if r in client_sockets:
+                        client_sockets.remove(r)
+                    if r in socket_map:
+                        del socket_map[r]
+                    r.close()
+                    continue
+
+                # forward from client to a node, leave map entry for reply
+                d = dict([line.split(': ') for line in dgram.split('\n')])
+                t = int(d['To'])
+                if args.verbose:
+                    print_msg(8, t, dgram)
+
+                if 0 <= t < 8 and sockets[t]:
+                    socket_map[int(d['Id'])] = r
+                    sockets[t].send(dgram)
+                else:
+                    r.close()
+                my_sockets.remove(r)
+
+def start_thread(function, i):
+    t = threading.Thread(target=function, args=[i])
+    t.daemon = True
+    t.start()
+    
 def run_bus():
     # start the receivers
     #
-    threads = [threading.Thread(target=transfer, args=[i]) for i in range(9)]
-    for t in threads:
-        t.daemon = True                   # so ^C works
-        t.start()
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-    s.bind('\0%s.bus.ctl' % getpass.getuser())
+    [start_thread(transfer, i) for i in range(8)]
 
-    # and handle fail/fix messages
-    #
-    while True:
-        dgram = s.recv(1024)
-        if not dgram:
-            break
-        if not args.quiet:
-            print dgram
-    
+    client_transfer()
 
 if __name__ == '__main__':
     run_bus()
