@@ -55,7 +55,7 @@ def transfer(i):
                 sockets[i] = None
                 break
 
-            d = dict([line.split(': ') for line in dgram.rstrip().split('\n')])
+            d = dict(filter(lambda x: len(x)==2, [line.split(': ') for line in dgram.split('\n')]))
             t,id = int(d['To']),int(d['Id'])
             if args.verbose:
                 print_msg(i, t, dgram)
@@ -97,7 +97,7 @@ def client_transfer():
                     continue
 
                 # forward from client to a node, leave map entry for reply
-                d = dict([line.split(': ') for line in dgram.split('\n')])
+                d = dict(filter(lambda x: len(x)==2, [line.split(': ') for line in dgram.split('\n')]))
                 t = int(d['To'])
                 if args.verbose:
                     print_msg(8, t, dgram)
