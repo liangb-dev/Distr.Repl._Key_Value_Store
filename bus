@@ -54,8 +54,8 @@ def transfer(i):
                 s.close()
                 sockets[i] = None
                 break
-            
-            d = dict([line.split(': ') for line in dgram.split('\n')])
+
+            d = dict([line.split(': ') for line in dgram.rstrip().split('\n')])
             t,id = int(d['To']),int(d['Id'])
             if args.verbose:
                 print_msg(i, t, dgram)
