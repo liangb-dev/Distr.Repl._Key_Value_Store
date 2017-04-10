@@ -60,7 +60,8 @@ def transfer(i):
             if args.verbose:
                 print_msg(i, t, dgram)
             if t < 8:
-                sockets[t].send(dgram)
+                if sockets[t]:
+                    sockets[t].send(dgram)
             elif id in socket_map:
                     socket_map[id].send(dgram)
                     socket_map[id].close()
