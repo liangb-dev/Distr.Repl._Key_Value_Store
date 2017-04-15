@@ -77,7 +77,8 @@ def client_transfer():
     ls.listen(2)
 
     while True:
-        ready, ignore1, ignore2 = select.select(my_sockets + [socket_map[i] for i in socket_map] + [ls], (), ())
+        all_sockets = my_sockets + [socket_map[i] for i in socket_map] + [ls]
+        ready, ignore1, badones = select.select(all_sockets , (), all_sockets)
         for r in ready:
             if r == ls:
                 s2,addr = r.accept()
@@ -88,12 +89,17 @@ def client_transfer():
                 try:
                     dgram = r.recv(4096)
                 except:
+                    print 'exception: dgram none, socket:', r
                     dgram = None
                 if not dgram or not dgram.startswith('To: '):
                     if r in client_sockets:
                         client_sockets.remove(r)
-                    if r in socket_map:
-                        del socket_map[r]
+                    if r in socket_map.values():
+                        for k,v in socket_map.items():
+                            if v == r:
+                                del socket_map[k]
+                    if r in my_sockets:
+                        my_sockets.remove(r)
                     r.close()
                     continue
 
