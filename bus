@@ -25,9 +25,12 @@ args = parser.parse_args()
 sockets = [None] * 8
 socket_map = dict()
 
+printlock = threading.Lock()
 def print_msg(f, t, msg):
-    for line in msg.split('\n'):
-        print f, '->', t, line
+    m = '-> ' + '\n-> '.join(msg.split('\n')) + '\n'
+    printlock.acquire()
+    print m
+    printlock.release()
 
 # a single endpoint - accept connections on "bus.#", and forward packets between
 # connections. Runs as a separate thread.
@@ -83,8 +86,6 @@ def client_transfer():
             if r == ls:
                 s2,addr = r.accept()
                 my_sockets.append(s2)
-                if not args.quiet:
-                    print 'connection from', addr
             else:
                 try:
                     dgram = r.recv(4096)
