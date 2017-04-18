@@ -130,4 +130,7 @@ def run_bus():
     client_transfer()
 
 if __name__ == '__main__':
-    run_bus()
+    try:
+        run_bus()
+    except KeyboardInterrupt:
+        sys.exit(0)

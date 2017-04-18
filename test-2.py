@@ -167,7 +167,7 @@ def test3():
             start_node(i)
     time.sleep(0.5)
 
-    vals = dict([(rkey(), rvalue()) for i in range(2)])
+    vals = dict([(rkey(), rvalue()) for i in range(10)])
     for k,v in vals.items():
         rclient('put', k, v)
     time.sleep(0.5)
