@@ -17,6 +17,13 @@ parser.add_argument('nodeid', metavar='n', type=int, nargs=1,
 args = parser.parse_args()
 nodeid = args.nodeid[0]
 
+
+def hash2node(key): 
+    h = sum(map(lambda x: int(ord(x)), list(key)))%255
+    n = int(h/0x20)
+    return n
+
+
 def receive(s):
     while True:
         dgram = s.recv(4096)
