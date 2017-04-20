@@ -7,6 +7,8 @@ import threading
 import string
 import getpass
 import argparse
+import Queue
+import random
 
 parser = argparse.ArgumentParser(description='example - send messages on message bus')
 parser.add_argument('nodeid', metavar='n', type=int, nargs=1, help='Node ID')
@@ -14,11 +16,11 @@ parser.add_argument('nodeid', metavar='n', type=int, nargs=1, help='Node ID')
 args = parser.parse_args()
 nodeid = args.nodeid[0]
 
-keys = dict()
+localdict = dict()
 cmdarr = Queue.Queue()
 okarr = Queue.Queue()
-cachedict = dict()
-ackdict = dict()
+ackarr = [] 
+seq = random.randint(5000,10000)
 
 #TODO: 1s Timeout for cachedict & ackdict
 
@@ -72,20 +74,32 @@ def putqueue(pkt):
 
 
 """
+processok
+args: pkt, client, s
+return: none
+description: checks if pkt is in ackarr, if it is then send 'cmd:ok' and delete ack entry (including sibling entries)
 """
-def processok(pkt):
-    To = parsepkt(pkt)[0]
-    From = parsepkt(pkt)[1]
-    Cmd = parsepkt(pkt)[2]
-    Id = parsepkt(pkt)[3]
-    Key = parsepkt(pkt)[4]
-    Value = parsepkt(pkt)[5]
+def processok(s):
+    while True:
+        if not okarr.empty():
+            pkt = okarr.get()        
+    
+            To = parsepkt(pkt)[0]
+            From = parsepkt(pkt)[1]
+            Cmd = parsepkt(pkt)[2]
+            Id = parsepkt(pkt)[3]
+            Key = parsepkt(pkt)[4]
+            Value = parsepkt(pkt)[5]
+            Client = pkt[-1:]
 
-    # FOUND
-        # SEND 'cmd:ok'
-    # ELSE
-
-
+            for i in range(0,len(ackarr)):
+                if len(ackarr[i]) != 0:
+                    for pkt in ackarr[i]:
+                        if Id in pkt.split('\n')[3]:
+                            seq += 1
+                            s.send(mkpkt(Client, nodeid, 'ok', seq, Key, Value))
+                            myarr.pop(i)
+                     
 
 """
 protocolop
@@ -93,57 +107,67 @@ args: pkt, nodeid, s
 return: null
 description: Performs cmd operations
 """
-def protocolop(pkt, s):
+def protocolop(s):
+    while True:
+        if not cmdarr.empty():
+            pkt = cmdarr.get()
     
-    To = parsepkt(pkt)[0]
-    From = parsepkt(pkt)[1]
-    Cmd = parsepkt(pkt)[2]
-    Id = parsepkt(pkt)[3]
-    Key = parsepkt(pkt)[4]
-    Value = parsepkt(pkt)[5]
+            To = parsepkt(pkt)[0]
+            From = parsepkt(pkt)[1]
+            Cmd = parsepkt(pkt)[2]
+            Id = parsepkt(pkt)[3]
+            Key = parsepkt(pkt)[4]
+            Value = parsepkt(pkt)[5]
     
-    n = hash2node(key)
-    
+            n = hash2node(key)    
 
-    if (cmd == 'put'):
-        # Send 'store' message to each node n, n+1, n+2
-        # Use correct ID field 
-        for i in range(0, 3):
-            pkt = mkpkt(n+i, nodeid, 'store',seq, Key, Value) 
-            cachedict[Id] = pkt
-            s.send(pkt)
+            tmp = []
 
-        # return 'cmd: ok' to client if get reply from one
-        # If all three nodes don't reply (within 1s each), reply 'cmd:fail' to client
+            if (cmd == 'put'):
+                # Send 'store' message to each node n, n+1, n+2
+                # Use correct ID field 
+                for i in range(0, 3):
+                    seq += 1
+                    pkt = mkpkt(n+i, nodeid, 'store',seq, Key, Value) + str(To) 
+                    tmp.append(pkt)
+                    s.send(pkt)
 
-    elif (cmd == 'store'):
-        keys[Key] = Value  # store key/value pair in internal database
-        s.send(mkpkt(From, nodeid, 'ok', seq, Key, Value)) # return 'cmd:ok'
+                # return 'cmd: ok' to client if get reply from one
+                # If all three nodes don't reply (within 1s each), reply 'cmd:fail' to client
+
+            elif (cmd == 'store'):
+                localdict[Key] = Value  # store key/value pair in internal database
+                s.send(mkpkt(From, nodeid, 'ok', Id, Key, Value)) # return 'cmd:ok'
         
 
-    elif (cmd == 'get'):
-        # Send 'fetch' to nodes n, n+1, n+2
-        for i in range(0,3):
-            pkt = mkpkt(n+i, nodeid, 'fetch', seq, Key, Value)
-            cachedict[Id] = pkt
-            s.send(pkt)
+            elif (cmd == 'get'):
+                # Send 'fetch' to nodes n, n+1, n+2
+                for i in range(0,3):
+                    seq += 1
+                    pkt = mkpkt(n+i, nodeid, 'fetch', seq, Key, Value) + str(To)
+                    tmp.append(pkt)
+                    s.send(pkt)
         
-        # return 'cmd:ok' if one replies (appropriate 'id', 'key', and 'value'
-        # else return 'cmd:fail' 
-    elif (cmd == 'fetch'):
-        # look up requested key and return it in a 'cmd:ok' message
-        if Key in keys:
-            s.send(mkpkt(From, nodeid, 'ok', seq, Key, keys[Key]))
-        # else return 'cmd: fail'
-            s.send(mkpkt(From, nodeid, 'fail', seq, Key, Value))
-    elif (cmd == 'reload'):
-        # send a 'cmd:store' with every key in internal database to send node n
-        for key in keys.keys():
-            pkt = mkpkt(n, nodeid, 'store', seq, key, keys[key])
-            cachedict[Id] = pkt
-            s.send(pkt)
-        # wait for reply 
-    else:
+                # return 'cmd:ok' if one replies (appropriate 'id', 'key', and 'value'
+                # else return 'cmd:fail' 
+            elif (cmd == 'fetch'):
+                # look up requested key and return it in a 'cmd:ok' message
+                if Key in local:
+                    s.send(mkpkt(From, nodeid, 'ok', Id, Key, localdict[Key]))
+                # else return 'cmd: fail'
+                else: 
+                    s.send(mkpkt(From, nodeid, 'fail', Id, Key, Value))
+            elif (cmd == 'reload'):
+                # send a 'cmd:store' with every key in internal database to send node n
+                for key in localdict.keys():
+                    seq += 1
+                    pkt = mkpkt(n, nodeid, 'store', seq, key, localdict[key]) + str(To)
+                    tmp.append(pkt)
+                    s.send(pkt)
+                # wait for reply 
+
+
+            ackarr.append(tmp)
 
 
 def receive(s):
@@ -162,15 +186,15 @@ if __name__ == '__main__':
         print 'connection error'
         sys.exit(1)
 
+    # thread for handling all received packages
     t = threading.Thread(target = receive, args=[s])
     t.daemon = True
     t.start()
 
-    seq = 0
-    while True:
-        for i in range(9):
-            time.sleep(1)
-            pkt = "To: %d\nFrom: %d\nCmd: test\nId: %d\nKey: \nValue: \n" % (i, nodeid, seq)
-            s.send(pkt)
-            seq += 1
+    # thread for specifically sending 'cmd:ok'
+    t = threading.Thread(target = processok, args=[s])
+    t.daemon = True
+    t.start()
 
+    # handle all other cmd packets
+    protocolop(s)   
