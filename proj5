@@ -186,7 +186,7 @@ if __name__ == '__main__':
         print 'connection error'
         sys.exit(1)
 
-    # thread for handling all received packages
+    # thread for receiving packages & caching into cmdarr or okarr
     t = threading.Thread(target = receive, args=[s])
     t.daemon = True
     t.start()
@@ -196,5 +196,5 @@ if __name__ == '__main__':
     t.daemon = True
     t.start()
 
-    # handle all other cmd packets
+    # handle (send) all other cmd packets
     protocolop(s)   
