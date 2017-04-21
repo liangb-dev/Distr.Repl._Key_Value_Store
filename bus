@@ -25,6 +25,7 @@ args = parser.parse_args()
 sockets = [None] * 8
 socket_map = dict()
 
+maplock = threading.Lock()
 printlock = threading.Lock()
 def print_msg(f, t, msg):
     m = '-> ' + '\n-> '.join(msg.split('\n')) + '\n'
@@ -65,10 +66,14 @@ def transfer(i):
             if t < 8:
                 if sockets[t]:
                     sockets[t].send(dgram)
-            elif id in socket_map:
+            else:
+                # fix race condition vs. 'del socket_map[id]' in client_transfer()
+                maplock.acquire()
+                if id in socket_map:
                     socket_map[id].send(dgram)
                     socket_map[id].close()
                     del socket_map[id]
+                maplock.release()
 
 client_sockets = []
 
@@ -95,10 +100,14 @@ def client_transfer():
                 if not dgram or not dgram.startswith('To: '):
                     if r in client_sockets:
                         client_sockets.remove(r)
+
+                    maplock.acquire()
                     if r in socket_map.values():
                         for k,v in socket_map.items():
                             if v == r:
                                 del socket_map[k]
+                    maplock.release()
+
                     if r in my_sockets:
                         my_sockets.remove(r)
                     r.close()
