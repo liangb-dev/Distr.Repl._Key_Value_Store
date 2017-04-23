@@ -20,7 +20,7 @@ localdict = dict()
 cmdarr = []
 okarr = []
 ackarr = [] 
-seq = random.randint(5000,10000)
+seq = random.randint(1000,1000000)
 
 
 
@@ -56,7 +56,7 @@ return: String
 description: Takes input and formats a packet
 """
 def mkpkt(To, From, Cmd, Id, Key, Value):
-    pkt = "To: %s\nFrom: %s\nCmd: %s\nId: %s\nKey: %s\nValue: %s\n" % (To, From, Cmd, Id, Key, Value)
+    pkt = "To: %s\nFrom: %s\nCmd: %s\nId: %s\nKey: %s\nValue: %s" % (To, From, Cmd, Id, Key, Value)
     return pkt
 
 
@@ -66,7 +66,7 @@ description: random 0.001 precision sleep
 """
 def randsleep():
     time.sleep(random.randint(10,100)/10)
-
+    
 """
 putqueue
 args: pkt
@@ -100,7 +100,7 @@ def printpkt(pkt, str1):
     if (len(parsepkt(pkt))> 6):
         Client = parsepkt(pkt)[6]
 
-    print str1 + " To: %s, From: %s, Cmd: %s, Id: %s" % (To, From, Cmd, Id)
+    print str1 + " To: %s, From: %s, Cmd: %s, Id: %s, Key: %s" % (To, From, Cmd, Id, Key)
 
 
 """
@@ -176,9 +176,9 @@ def protocolop(s):
                 # Use correct ID field 
                 for i in range(0, 3):
                     seq += 1
-                    pkt = mkpkt(str(n+i), nodeid, 'store', str(seq), Key, Value) 
+                    pkt = mkpkt(str((n+i)%8), nodeid, 'store', str(seq), Key, Value) 
                     s.send(pkt)
-                    tmp.append(pkt + "Client: " + str(From) + "\nId: " + str(Id) + '\nTime: 9')
+                    tmp.append(pkt + "\nClient: " + str(From) + "\nId: " + str(Id) + '\nTime: 9')
 
                 # return 'cmd: ok' to client if get reply from one
                 # If all three nodes don't reply (within 1s each), reply 'cmd:fail' to client
@@ -186,26 +186,28 @@ def protocolop(s):
             elif (Cmd == 'store'):
                 localdict[Key] = Value  # store key/value pair in internal database
                 s.send(mkpkt(From, nodeid, 'ok', Id, Key, Value)) # return 'cmd:ok'
-        
+                print "Stored Key: %s : %s" % (Key,Value)  
 
             elif (Cmd == 'get'):
                 # Send 'fetch' to nodes n, n+1, n+2
                 for i in range(0,3):
                     seq += 1
-                    pkt = mkpkt(str(n+i), nodeid, 'fetch', str(seq), Key, Value)
+                    pkt = mkpkt(str((n+i)%8), nodeid, 'fetch', str(seq), Key, Value)
                     s.send(pkt)
-                    tmp.append(pkt + 'Client: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
+                    tmp.append(pkt + '\nClient: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
         
                 # return 'cmd:ok' if one replies (appropriate 'id', 'key', and 'value'
                 # else return 'cmd:fail' 
             elif (Cmd == 'fetch'):
                 # look up requested key and return it in a 'cmd:ok' message
+                print "Fetch Key: %s" % (Key)
+                #print localdict
                 if Key in localdict:
                     s.send(mkpkt(From, nodeid, 'ok', Id, Key, localdict[Key]))
-                    print "Found Key! %d : %d" % (Key, localdict[Key])
+                    print "Found Key! %s : %s" % (Key, localdict[Key])
                 # else return 'cmd: fail'
                 else:
-                    print "Didn't find Key..." 
+                    print "Didn't find Key........%s" % (Key) 
                     s.send(mkpkt(From, nodeid, 'fail', Id, Key, Value))
             elif (Cmd == 'reload'):
                 # send a 'cmd:store' with every key in internal database to send node n
@@ -214,7 +216,7 @@ def protocolop(s):
                     seq += 1
                     pkt = mkpkt(From, nodeid, 'store', str(seq), key, localdict[key]) 
                     s.send(pkt)
-                    tmp.append(pkt + 'Client: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
+                    tmp.append(pkt + '\nClient: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
                 # wait for reply 
             if (len(tmp) > 0):
                 print "ackarr sequence cached"
