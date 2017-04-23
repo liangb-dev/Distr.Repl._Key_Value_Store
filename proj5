@@ -214,12 +214,11 @@ def protocolop(s):
                     s.send(pkt)
                     tmp.append(pkt + 'Client: ' + str(To) + '\nTime: 9')
                 # wait for reply 
-
-            print "ackarr sequence cached"
-            for p in tmp:
-                printpkt(p, "cache: ")
-
-            ackarr.append(tmp)
+            if (len(tmp) > 0):
+                print "ackarr sequence cached"
+                for p in tmp:
+                    printpkt(p, "cache: ")
+                ackarr.append(tmp)
 
 
 def receive(s):
