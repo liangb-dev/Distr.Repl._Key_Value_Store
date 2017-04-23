@@ -128,15 +128,15 @@ def processok(s):
 
             i = 0
             while (i < len(ackarr)):
-                for pkt in ackarr[i]:                        
-                    if Id in parsepkt(pkt)[3]:
+                for ackpkt in ackarr[i]:                        
+                    if Id in parsepkt(ackpkt)[3]:
                         print "FOUND MATCHHHHHHHHH"
-                        Client = parsepkt(pkt)[6]
-                        ClientId = parsepkt(pkt)[7]
+                        Client = parsepkt(ackpkt)[6]
+                        ClientId = parsepkt(ackpkt)[7]
                         clientok = mkpkt(Client, nodeid, 'ok', ClientId, Key, Value)
                         s.send(clientok)
                         printpkt(clientok, "To Client ")
-                        printpkt(pkt, "ackarr popped! ")
+                        printpkt(ackpkt, "ackarr popped w/ siblings! ")
                         ackarr.pop(i)
                         i -= 1
                         break
@@ -281,12 +281,12 @@ if __name__ == '__main__':
     t2.daemon = True
     t2.start()
 
-    """
+    
     # thread for timeouts
     t3 = threading.Thread(target = dtimeout, args=[])
     t3.daemon = True
     t3.start()
-    """
+    
     # handle (send) all other cmd packets
     protocolop(s)  
     
