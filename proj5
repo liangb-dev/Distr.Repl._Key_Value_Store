@@ -202,8 +202,10 @@ def protocolop(s):
                 # look up requested key and return it in a 'cmd:ok' message
                 if Key in localdict:
                     s.send(mkpkt(From, nodeid, 'ok', Id, Key, localdict[Key]))
+                    print "Found Key! %d : %d" % (Key, localdict[Key])
                 # else return 'cmd: fail'
-                else: 
+                else:
+                    print "Didn't find Key..." 
                     s.send(mkpkt(From, nodeid, 'fail', Id, Key, Value))
             elif (Cmd == 'reload'):
                 # send a 'cmd:store' with every key in internal database to send node n
@@ -281,12 +283,12 @@ if __name__ == '__main__':
     t2.daemon = True
     t2.start()
 
-    
+    """
     # thread for timeouts
     t3 = threading.Thread(target = dtimeout, args=[])
     t3.daemon = True
     t3.start()
-    
+    """
     # handle (send) all other cmd packets
     protocolop(s)  
     
