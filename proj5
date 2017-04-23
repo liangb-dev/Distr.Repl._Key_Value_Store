@@ -131,9 +131,9 @@ def processok(s):
                 for pkt in ackarr[i]:                        
                     if Id in parsepkt(pkt)[3]:
                         print "FOUND MATCHHHHHHHHH"
-                        Client = parsepkt(pkt)[-2:-1][0]
-                        seq += 1
-                        clientok = mkpkt(Client, nodeid, 'ok', str(seq), Key, Value)
+                        Client = parsepkt(pkt)[6]
+                        ClientId = parsepkt(pkt)[7]
+                        clientok = mkpkt(Client, nodeid, 'ok', ClientId, Key, Value)
                         s.send(clientok)
                         printpkt(clientok, "To Client ")
                         printpkt(pkt, "ackarr popped! ")
@@ -178,7 +178,7 @@ def protocolop(s):
                     seq += 1
                     pkt = mkpkt(str(n+i), nodeid, 'store', str(seq), Key, Value) 
                     s.send(pkt)
-                    tmp.append(pkt + "Client: " + str(To) +'\nTime: 9')
+                    tmp.append(pkt + "Client: " + str(From) + "\nId: " + str(Id) + '\nTime: 9')
 
                 # return 'cmd: ok' to client if get reply from one
                 # If all three nodes don't reply (within 1s each), reply 'cmd:fail' to client
@@ -194,7 +194,7 @@ def protocolop(s):
                     seq += 1
                     pkt = mkpkt(str(n+i), nodeid, 'fetch', str(seq), Key, Value)
                     s.send(pkt)
-                    tmp.append(pkt + 'Client: ' + str(To) + '\nTime: 9')
+                    tmp.append(pkt + 'Client: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
         
                 # return 'cmd:ok' if one replies (appropriate 'id', 'key', and 'value'
                 # else return 'cmd:fail' 
@@ -212,7 +212,7 @@ def protocolop(s):
                     seq += 1
                     pkt = mkpkt(From, nodeid, 'store', str(seq), key, localdict[key]) 
                     s.send(pkt)
-                    tmp.append(pkt + 'Client: ' + str(To) + '\nTime: 9')
+                    tmp.append(pkt + 'Client: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
                 # wait for reply 
             if (len(tmp) > 0):
                 print "ackarr sequence cached"
@@ -248,7 +248,7 @@ def dtimeout():
             j = 0
             while(j < len(ackarr[i])): # iterate over every array group in ackarr
                 pkt = ackarr[i][j]    
-                timestamp = int(parsepkt(pkt)[7])
+                timestamp = int(parsepkt(pkt)[8])
                 if (timestamp == 0):
                     ackarr[i].pop(j)
                     j -= 1                
