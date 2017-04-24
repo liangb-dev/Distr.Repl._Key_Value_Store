@@ -110,13 +110,14 @@ def start_node(i):
     if not nodes[i]:
         nodes[i] = subprocess.Popen(['./proj5'] + args.extra + ["%d" % i],
                                     stdout=sys.stdout, stderr=sys.stdout)
-    time.sleep(0.05)
+    time.sleep(0.2)
 
 def stop_node(i, silent=False):
     global nodes
     if nodes[i]:
         nodes[i].send_signal(signal.SIGINT)
     nodes[i] = None
+    time.sleep(0.2)
 
 def start_nodes(numbers):
     if args.byhand:
