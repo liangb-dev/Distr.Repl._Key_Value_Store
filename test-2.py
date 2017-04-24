@@ -52,6 +52,7 @@ seq = 100
 def client(dst, cmd, key, value):
     global seq
     msg = FMT % (dst, cmd, seq, key, value)
+    n = seq
     seq += 1
     s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     if s.connect_ex('\0%s.bus.8' % getpass.getuser()):
@@ -64,12 +65,18 @@ def client(dst, cmd, key, value):
     if not ready[0]:
         retval = '*timeout*'
     else:
-        m = s.recv(4096)
-        status = m.split()[5]
-        if status == 'ok':
-            retval = m[m.find('Value:')+7:]
-        else:
-            retval = '*fail*'
+        while True:
+            m = s.recv(4096)
+            msg = m.split()
+            cmd, id = msg[5], msg[7]
+            if int(id) != n:
+                print 'expired message received'
+                continue
+            if cmd == 'ok':
+                retval = m[m.find('Value:')+7:]
+            else:
+                retval = '*fail*'
+            break
     s.close()
     if cmd == 'put':
         time.sleep(0.05)
@@ -100,8 +107,9 @@ nodes = [None] * 8
 # trying to kill all the error messages on shutdown - doesn't full work yet
 def start_node(i):
     global nodes
-    nodes[i] = subprocess.Popen(['./proj5'] + args.extra + ["%d" % i],
-                                stdout=sys.stdout, stderr=sys.stdout)
+    if not nodes[i]:
+        nodes[i] = subprocess.Popen(['./proj5'] + args.extra + ["%d" % i],
+                                    stdout=sys.stdout, stderr=sys.stdout)
     time.sleep(0.05)
 
 def stop_node(i, silent=False):
