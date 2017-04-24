@@ -17,10 +17,28 @@ args = parser.parse_args()
 nodeid = str(args.nodeid[0])
 
 localdict = dict()
-cmdarr = []
+
+putarr = []
+getarr = []
+storearr = []
+fetcharr = []
+reloadarr = []
 okarr = []
 ackarr = [] 
 seq = random.randint(1000,1000000)
+
+
+
+"""
+hash2node
+args: key
+return: n
+description: hashes a key
+"""
+def hash2node(key):
+    h = sum(map(lambda x: int(ord(x)), list(key)))%255
+    n = int(h/0x20)
+    return n 
 
 
 
@@ -39,17 +57,6 @@ def parsepkt(package):
 
 
 """
-hash2node
-args: key
-return: n
-description: hashes a key
-"""
-def hash2node(key):
-    h = sum(map(lambda x: int(ord(x)), list(key)))%255
-    n = int(h/0x20)
-    return n 
-
-"""
 mkpkt
 args: To, From, Cmd, Id, Key, Value
 return: String 
@@ -60,34 +67,13 @@ def mkpkt(To, From, Cmd, Id, Key, Value):
     return pkt
 
 
-"""
-randsleep
-description: random 0.001 precision sleep
-"""
-def randsleep():
-    time.sleep(random.randint(10,100)/10)
-    
-"""
-putqueue
-args: pkt
-return: none
-description: Puts pkt into either okarr or cmdarr
-"""
-def putqueue(pkt):
-    randsleep()
-    
-    if (parsepkt(pkt)[2] == 'ok'):
-        okarr.append(pkt)
-        printpkt(pkt, "okarr new item!")
-    else:
-        cmdarr.append(pkt)
-        printpkt(pkt, "cmdarr new item!")
+
 
 """
 printpkt
-args:
-return:
-description:
+args: pkt, String description
+return: 
+description: Prints out values to console (FOR DEBUG)
 """
 def printpkt(pkt, str1):
     To = parsepkt(pkt)[0]
@@ -103,6 +89,47 @@ def printpkt(pkt, str1):
     print str1 + " To: %s, From: %s, Cmd: %s, Id: %s, Key: %s" % (To, From, Cmd, Id, Key)
 
 
+
+    
+"""
+putqueue
+args: pkt
+return: none
+description: Puts pkt into arrays corresponding to 'cmd'
+"""
+def putqueue(pkt): 
+    cmd = parsepkt(pkt)[2] 
+
+    if (cmd == 'ok'):
+        okarr.append(pkt)
+    elif (cmd == 'put'):
+        putarr.append(pkt)
+    elif (cmd == 'store'): 
+        storearr.append(pkt)
+    elif (cmd == 'get'):
+        getarr.append(pkt)
+    elif (cmd == 'fetch'):
+        fetcharr.append(pkt)
+    elif (cmd == 'reload'):
+        reloadarr.append(pkt)
+
+
+"""
+okthreads
+args: s
+description: opens as many threads to handle "cmd:ok" from okarr as there are 
+"cmd:ok" msgs in okarr awaiting processing
+"""
+def okthreads(s):
+    while (True):
+        n = len(okarr)
+        for i in range(0,n):
+            t0 = threading.Thread(target = processok, args=[s])
+            t0.daemon = True
+            t0.start()
+         
+
+
 """
 processok
 args: pkt, client, s
@@ -111,120 +138,186 @@ description: checks if pkt is in ackarr, if it is then send 'cmd:ok' and delete 
 """
 def processok(s):
     global seq
-    global timelimit
-    while True:
-        if len(okarr) > 0:
-            pkt = okarr.pop(0)        
-            printpkt(pkt, "okarr item processed!")
-            randsleep()    
-        
-            To = parsepkt(pkt)[0]
-            From = parsepkt(pkt)[1]
-            Cmd = parsepkt(pkt)[2]
-            Id = parsepkt(pkt)[3]
-            Key = parsepkt(pkt)[4]
-            Value = parsepkt(pkt)[5]
+    if len(okarr) > 0:
+        pkt = okarr.pop(0)        
+          
+        Cmd = parsepkt(pkt)[2]
+        Id = parsepkt(pkt)[3]
+        Key = parsepkt(pkt)[4]
+        Value = parsepkt(pkt)[5]
             
-
-            i = 0
-            while (i < len(ackarr)):
-                for ackpkt in ackarr[i]:                        
-                    if Id in parsepkt(ackpkt)[3]:
-                        print "FOUND MATCHHHHHHHHH"
-                        Client = parsepkt(ackpkt)[6]
-                        ClientId = parsepkt(ackpkt)[7]
-                        clientok = mkpkt(Client, nodeid, 'ok', ClientId, Key, Value)
-                        s.send(clientok)
-                        printpkt(clientok, "To Client ")
-                        printpkt(ackpkt, "ackarr popped w/ siblings! ")
+        i = 0
+        while (i < len(ackarr)):
+            for ackpkt in ackarr[i]:                        
+                if Id in parsepkt(ackpkt)[3]:
+                    Client = parsepkt(ackpkt)[6]
+                    ClientId = parsepkt(ackpkt)[7]
+                    clientok = mkpkt(Client, nodeid, 'ok', ClientId, Key, Value)
+                    s.send(clientok)
+                    if (len(ackarr)>0):
                         ackarr.pop(i)
-                        i -= 1
-                        break
-                            
-                break
+                    i = 9999
+                    break
             i += 1                
-                                 
+
+
+
+                   
                      
 
 """
-protocolop
+op_put
 args: pkt, nodeid, s
 return: null
-description: Performs cmd operations
+description: send "cmd:store" to nodes n, n+1, n+2
+            IF reply from any, then return "cmd:ok" to Client   
+            ELSE return "cmd:fail" to Client
 """
-def protocolop(s):
+def op_put(s):
     global seq
     while True:
-        randsleep()
-        if len(cmdarr) > 0:
-            pkt = cmdarr.pop(0)
-            printpkt(pkt, "cmdarr processed!")
+        if len(putarr) > 0:
+            pkt = putarr.pop(0)
     
-            To = parsepkt(pkt)[0]
             From = parsepkt(pkt)[1]
-            Cmd = parsepkt(pkt)[2]
             Id = parsepkt(pkt)[3]
             Key = parsepkt(pkt)[4]
             Value = parsepkt(pkt)[5]
-    
             n = hash2node(Key)    
-
             tmp = []
 
-            if (Cmd == 'put'):
-                # Send 'store' message to each node n, n+1, n+2
-                # Use correct ID field 
-                for i in range(0, 3):
-                    seq += 1
-                    pkt = mkpkt(str((n+i)%8), nodeid, 'store', str(seq), Key, Value) 
-                    s.send(pkt)
-                    tmp.append(pkt + "\nClient: " + str(From) + "\nId: " + str(Id) + '\nTime: 9')
+            for i in range(0, 3):
+                seq += 1
+                pkt = mkpkt(str((n+i)%8), nodeid, 'store', str(seq), Key, Value) 
+                s.send(pkt)
+                tmp.append(pkt +"\nClient: %s\nId: %s\nTime: 9"%(From, Id))
 
-                # return 'cmd: ok' to client if get reply from one
-                # If all three nodes don't reply (within 1s each), reply 'cmd:fail' to client
+            ackarr.append(tmp)
 
-            elif (Cmd == 'store'):
-                localdict[Key] = Value  # store key/value pair in internal database
-                s.send(mkpkt(From, nodeid, 'ok', Id, Key, Value)) # return 'cmd:ok'
-                print "$%s -Stored Key: %s : %s" % (nodeid,Key,Value)  
 
-            elif (Cmd == 'get'):
-                # Send 'fetch' to nodes n, n+1, n+2
-                for i in range(0,3):
-                    seq += 1
-                    pkt = mkpkt(str((n+i)%8), nodeid, 'fetch', str(seq), Key, Value)
-                    s.send(pkt)
-                    tmp.append(pkt + '\nClient: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
+
+
+"""
+op_store
+args: s
+description: takes Key and Value and stores them into Localdict. Then sends 'cmd:ok'
+back to the Client
+"""
+def op_store(s):
+            
+    global seq
+    while True:
+        if len(storearr) > 0:
+            pkt = storearr.pop(0)
+    
+            From = parsepkt(pkt)[1]
+            Id = parsepkt(pkt)[3]
+            Key = parsepkt(pkt)[4]
+            Value = parsepkt(pkt)[5]
+
+            localdict[Key] = Value  # store key/value pair in internal database
+            s.send(mkpkt(From, nodeid, 'ok', Id, Key, Value)) # return 'cmd:ok'  
+
+"""
+op_get
+args: s
+description: sends 'cmd:fetch' to n, n+1, n+2. Caches sent msgs in ackarr. 
+"""
+def op_get(s):
+
+    global seq
+    while True:
+        if len(getarr) > 0:
+            pkt = getarr.pop(0)
+    
+            From = parsepkt(pkt)[1]
+            Id = parsepkt(pkt)[3]
+            Key = parsepkt(pkt)[4]
+            Value = parsepkt(pkt)[5]
+            n = hash2node(Key)    
+            tmp = []
+
+            for i in range(0,3):
+                seq += 1
+                pkt = mkpkt(str((n+i)%8), nodeid, 'fetch', str(seq), Key, Value)
+                s.send(pkt)
+                tmp.append(pkt + '\nClient: %s\nId: %s\nTime: 9'%(From,Id))
         
-                # return 'cmd:ok' if one replies (appropriate 'id', 'key', and 'value'
-                # else return 'cmd:fail' 
-            elif (Cmd == 'fetch'):
-                # look up requested key and return it in a 'cmd:ok' message
-                print "Fetch Key: %s" % (Key)
-                #print localdict
-                if Key in localdict:
-                    s.send(mkpkt(From, nodeid, 'ok', Id, Key, localdict[Key]))
-                    print "Found Key! %s : %s" % (Key, localdict[Key])
-                # else return 'cmd: fail'
-                else:
-                    print "Didn't find Key........%s" % (Key) 
-                    s.send(mkpkt(From, nodeid, 'fail', Id, Key, Value))
-            elif (Cmd == 'reload'):
-                # send a 'cmd:store' with every key in internal database to send node n
+            ackarr.append(tmp)
+
+
+"""
+op_fetch
+args: s
+description: check if Key is in Localdict, if it is then send 'cmd:ok' to Client, 
+else send 'cmd:fail' to Client
+"""
+def op_fetch(s):
+
+    global seq
+    while True:
+        if len(fetcharr) > 0:
+            pkt = fetcharr.pop(0)
+    
+            From = parsepkt(pkt)[1]
+            Id = parsepkt(pkt)[3]
+            Key = parsepkt(pkt)[4]
+            Value = parsepkt(pkt)[5]
+ 
+            if Key in localdict: # IF Key is in localdict 'cmd:ok'
+                s.send(mkpkt(From, nodeid, 'ok', Id, Key, localdict[Key]))
+            else:   # ELSE 'cmd:fail'
+                s.send(mkpkt(From, nodeid, 'fail', Id, Key, Value))
+
+
+
+"""
+op_reload
+args: s
+decription: handles 'cmd:reload' msgs exclusively
+Upon receiving reload, loops over every Key in Localdict and sends "cmd:store" back
+to the Client with correct Key and Value
+"""
+def op_reload(s):
+
+    global seq
+    while True:
+        if len(reloadarr) > 0:
+            pkt = reloadarr.pop(0)
+    
+            From = parsepkt(pkt)[1]
+            Id = parsepkt(pkt)[3]
+            Key = parsepkt(pkt)[4]
+            Value = parsepkt(pkt)[5]
+            n = hash2node(Key)    
+            tmp = []
                 
-                for key in localdict.keys():
-                    seq += 1
-                    pkt = mkpkt(From, nodeid, 'store', str(seq), key, localdict[key]) 
-                    s.send(pkt)
-                    tmp.append(pkt + '\nClient: ' + str(From) + "\nId: " + str(Id) + '\nTime: 9')
-                # wait for reply 
-            if (len(tmp) > 0):
-                print "ackarr sequence cached"
-                for p in tmp:
-                    printpkt(p, "cache: ")
-                ackarr.append(tmp)
+            for key in localdict.keys(): # loop over every key in localdict
+                seq += 1
+                pkt = mkpkt(From, nodeid, 'store', str(seq), key, localdict[key]) 
+                s.send(pkt)
+                tmp.append(pkt + "\nClient: %s\nId: %s\nTime: 9"%(From,Id))
+            
+            ackarr.append(tmp) # stores in ackarr to await ack
 
 
+"""
+nodeinit
+args: s
+description: sends 'cmd:reload' to nodes n-2, n-1, n+1, n+2
+"""
+def nodeinit(s):
+    global seq
+    for i in range(-2,3):   #-2, -1, 1, 2
+        if (i != 0):    # hop over n+0 (itself)
+            s.send(mkpkt(str(int(nodeid)+i), nodeid, 'reload', seq, '', ''))
+            seq += 1
+
+"""
+receive
+args: s
+description: receives packages from socket and sends them over to 'putqueue()' 
+"""
 def receive(s):
     while True:
         dgram = s.recv(4096)
@@ -232,32 +325,27 @@ def receive(s):
             print 'lost connection'
             sys.exit(1)
 
-        putqueue(dgram) # separates packages into okarr and cmdarr
-        """
-        print 'received:' 
-        for line in dgram.split('\n'):
-            print ' ', line
-        """
+        putqueue(dgram) # separates packages into respective arrays
+
+
 
 """
 dtimeout
 description: function that handles timeout of all cached msgs
 """
 def dtimeout():
-    # timeout only for ackarr
-    global ackarr
     while True:
         i = 0
         while(i < len(ackarr)): # iterate over entire ackarr
             j = 0
-            while(j < len(ackarr[i])): # iterate over every array group in ackarr
-                pkt = ackarr[i][j]    
+            while(j < len(ackarr[i])): # iterate over every subarray in ackarr
+                pkt = ackarr[i][j]  # get pkt every subarray
                 timestamp = int(parsepkt(pkt)[8])
                 if (timestamp == 0):
-                    ackarr[i].pop(j)
+                    ackarr[i].pop(j)    # then pop that pkt
                     j -= 1                
                 else: 
-                    ackarr[i][j] = pkt[:-1] + str(timestamp-1)
+                    ackarr[i][j] = pkt[:-1] + str(timestamp-1) # decrement
                 j += 1
 
             if (len(ackarr[i]) == 0):   # if group becomes empty 
@@ -268,6 +356,8 @@ def dtimeout():
         time.sleep(0.1)
 
 
+
+
 if __name__ == '__main__':
     s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     s.bind('\0%s.test-%d' % (getpass.getuser(), int(nodeid)))
@@ -275,31 +365,46 @@ if __name__ == '__main__':
         print 'connection error'
         sys.exit(1)
 
-    # thread for receiving packages & caching into cmdarr or okarr
-    t = threading.Thread(target = receive, args=[s])
+    
+    # node initialize
+    nodeinit(s)
+   
+ 
+    # thread for timeouts
+    t = threading.Thread(target = dtimeout, args=[])
     t.daemon = True
     t.start()
     
-    # thread for specifically sending 'cmd:ok'
-    t2 = threading.Thread(target = processok, args=[s])
+    
+    # thread handle 'cmd:ok'
+    t2 = threading.Thread(target = okthreads, args=[s])
     t2.daemon = True
     t2.start()
 
-    """
-    # thread for timeouts
-    t3 = threading.Thread(target = dtimeout, args=[])
+
+    # thread handle "cmd:put"
+    t3 = threading.Thread(target = op_put, args=[s])
     t3.daemon = True
     t3.start()
-    """
-    # handle (send) all other cmd packets
-    protocolop(s)  
-    
 
+    # thread handle "cmd:store"
+    t4 = threading.Thread(target = op_store, args=[s])
+    t4.daemon = True
+    t4.start()
 
-    """
-    while True:
-        for i in range(9):
-            time.sleep(1)
-            s.send(mkpkt(i, nodeid, 'test', seq, " ", " "))
-            seq += 1 
-    """
+    # thread handle "cmd:get"
+    t5 = threading.Thread(target = op_get, args=[s])
+    t5.daemon = True
+    t5.start()
+
+    # thread handle "cmd:fetch"
+    t6 = threading.Thread(target = op_fetch, args=[s])
+    t6.daemon = True
+    t6.start()
+
+    # thread handle "cmd:reload"
+    t7 = threading.Thread(target = op_reload, args=[s])
+    t7.daemon = True
+    t7.start()
+
+    receive(s)
