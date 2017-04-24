@@ -186,7 +186,7 @@ def protocolop(s):
             elif (Cmd == 'store'):
                 localdict[Key] = Value  # store key/value pair in internal database
                 s.send(mkpkt(From, nodeid, 'ok', Id, Key, Value)) # return 'cmd:ok'
-                print "Stored Key: %s : %s" % (Key,Value)  
+                print "$%s -Stored Key: %s : %s" % (nodeid,Key,Value)  
 
             elif (Cmd == 'get'):
                 # Send 'fetch' to nodes n, n+1, n+2
